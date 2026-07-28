@@ -1,0 +1,43 @@
+name: Build Mobile App
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'mobile/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Setup Expo CLI
+        working-directory: mobile
+        run: npm install -g eas-cli
+
+      - name: Login to Expo
+        working-directory: mobile
+        run: eas login --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build Android
+        working-directory: mobile
+        run: eas build --platform android --profile production --non-interactive
+
+      - name: Build iOS
+        working-directory: mobile
+        run: eas build --platform ios --profile production --non-interactive

@@ -73,24 +73,51 @@ npx expo start
 
 ## Deployment
 
-### Backend (Render)
+### Backend (Render) - Auto Deploy on Push
 
-1. Push to GitHub
-2. Connect repo to Render
-3. Deploy as Python service
+1. Go to [render.com](https://render.com) and create an account
+2. Click "New +" → "Web Service"
+3. Connect your GitHub repo: `DALI951/quran-reel-detector`
+4. Render will auto-detect the `render.yaml` config
+5. Set these environment variables in Render dashboard:
+   - `PYTHON_VERSION` = `3.11`
+6. Deploy! It will auto-deploy on every push to `master`
 
-### Mobile (EAS)
+**Alternatively**, set up GitHub Actions secrets for programmatic deploys:
+- Go to repo → Settings → Secrets → Actions
+- Add `RENDER_SERVICE_ID` and `RENDER_API_KEY` from Render dashboard
 
+### Mobile (EAS) - Auto Build on Push
+
+1. Create an [Expo](https://expo.dev) account
+2. Get your token from expo.dev → Account Settings → Access Tokens
+3. Go to repo → Settings → Secrets → Actions
+4. Add secret: `EXPO_TOKEN` = your Expo access token
+5. Push to `master` and the build will trigger automatically
+
+**Manual build:**
 ```bash
+cd mobile
+npm install
 npm install -g eas-cli
-eas build
+eas login
+eas build --platform android --profile production
+eas build --platform ios --profile production
 ```
+
+### GitHub Actions Workflows
+
+| Workflow | Trigger | What it does |
+|----------|---------|--------------|
+| `deploy-backend.yml` | Push to `backend/**` | Deploys API to Render |
+| `build-mobile.yml` | Push to `mobile/**` | Builds Android & iOS apps via EAS |
 
 ## Tech Stack
 
 - **Backend**: Python, FastAPI, yt-dlp, Whisper
 - **Mobile**: React Native, Expo
 - **AI Model**: tarteel-ai/whisper-base-ar-quran
+- **CI/CD**: GitHub Actions, Render, EAS Build
 
 ## License
 
