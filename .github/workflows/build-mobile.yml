@@ -1,10 +1,9 @@
-name: Build Mobile App
+name: Build & Release APK
 
 on:
   push:
     branches: [master]
-    paths:
-      - 'mobile/**'
+  workflow_dispatch:
 
 jobs:
   build:
@@ -24,7 +23,7 @@ jobs:
         working-directory: mobile
         run: npm ci
 
-      - name: Setup Expo CLI
+      - name: Setup EAS CLI
         working-directory: mobile
         run: npm install -g eas-cli
 
@@ -34,10 +33,28 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Build Android
+      - name: Build Android APK
         working-directory: mobile
         run: eas build --platform android --profile production --non-interactive
 
-      - name: Build iOS
+      - name: Get build artifact URL
+        id: build-url
         working-directory: mobile
-        run: eas build --platform ios --profile production --non-interactive
+        run: |
+          BUILD_URL=$(eas build:list --platform android --limit 1 --json | jq -r '.[0].artifacts.buildUrl')
+          echo "url=$BUILD_URL" >> $GITHUB_OUTPUT
+
+      - name: Download APK
+        run: |
+          mkdir -p artifacts
+          curl -L -o artifacts/quran-reel-detector.apk "${{ steps.build-url.outputs.url }}"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ github.run_number }}
+          name: Release v${{ github.run_number }}
+          files: artifacts/quran-reel-detector.apk
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

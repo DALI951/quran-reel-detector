@@ -11,12 +11,13 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { detectQuran, DetectionResult } from './services/api';
+import { transcribeAudio } from './services/transcription';
+import { findBestMatch } from './services/quranData';
 
 export default function App() {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<DetectionResult | null>(null);
+  const [result, setResult] = useState<any>(null);
 
   const handleDetect = async () => {
     if (!url.trim()) {
@@ -28,13 +29,64 @@ export default function App() {
     setResult(null);
 
     try {
-      const detectionResult = await detectQuran(url);
-      setResult(detectionResult);
+      // Step 1: Download audio from reel
+      const audioUrl = await downloadAudioFromReel(url);
+
+      // Step 2: Fetch and convert audio to blob
+      const audioBlob = await fetchAudioBlob(audioUrl);
+
+      // Step 3: Transcribe using HuggingFace Whisper
+      const transcription = await transcribeAudio(audioBlob);
+
+      // Step 4: Match to Quran verse
+      const match = findBestMatch(transcription);
+
+      if (match) {
+        setResult({
+          ...match,
+          transcription,
+        });
+      } else {
+        Alert.alert('No Match', 'Could not match transcription to any Quran verse');
+      }
     } catch (error) {
       Alert.alert('Error', error instanceof Error ? error.message : 'Failed to detect Quran');
     } finally {
       setLoading(false);
     }
+  };
+
+  const downloadAudioFromReel = async (reelUrl: string): Promise<string> => {
+    // Detect platform and use appropriate API
+    const platform = detectPlatform(reelUrl);
+
+    if (platform === 'instagram') {
+      // Use a free Instagram download API
+      const response = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(reelUrl)}`);
+      const html = await response.text();
+
+      // Extract video URL from page source
+      const videoMatch = html.match(/"video_url":"([^"]+)"/);
+      if (videoMatch) {
+        return videoMatch[1];
+      }
+    }
+
+    // For other platforms or fallback, return the URL directly
+    // (In production, use a proper video download API)
+    throw new Error('Please provide a direct video/audio URL or use Instagram');
+  };
+
+  const detectPlatform = (url: string): string => {
+    if (url.includes('instagram.com')) return 'instagram';
+    if (url.includes('tiktok.com')) return 'tiktok';
+    if (url.includes('youtube.com') || url.includes('youtu.be')) return 'youtube';
+    return 'unknown';
+  };
+
+  const fetchAudioBlob = async (url: string): Promise<Blob> => {
+    const response = await fetch(url);
+    return await response.blob();
   };
 
   return (
@@ -74,13 +126,13 @@ export default function App() {
         {result && (
           <View style={styles.resultCard}>
             <View style={styles.resultHeader}>
-              <Text style={styles.surahName}>{result.surah_name}</Text>
-              <Text style={styles.surahEnglish}>{result.surah_english_name}</Text>
-              <Text style={styles.verseNumber}>Verse {result.verse_number}</Text>
+              <Text style={styles.surahName}>{result.surahName}</Text>
+              <Text style={styles.surahEnglish}>{result.surahEnglishName}</Text>
+              <Text style={styles.verseNumber}>Verse {result.verseNumber}</Text>
             </View>
 
             <View style={styles.verseContainer}>
-              <Text style={styles.verseText}>{result.verse_text}</Text>
+              <Text style={styles.verseText}>{result.verseText}</Text>
             </View>
 
             <View style={styles.infoContainer}>
@@ -90,7 +142,7 @@ export default function App() {
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Surah Number:</Text>
-                <Text style={styles.infoValue}>{result.surah_number}</Text>
+                <Text style={styles.infoValue}>{result.surahNumber}</Text>
               </View>
             </View>
 
@@ -103,7 +155,7 @@ export default function App() {
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            Supports Instagram, TikTok, and YouTube reels
+            No server required - runs on your device
           </Text>
         </View>
       </ScrollView>
