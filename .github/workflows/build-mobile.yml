@@ -34,27 +34,52 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
       - name: Build Android APK
-        working-directory: mobile
-        run: eas build --platform android --profile production --non-interactive
-
-      - name: Get build artifact URL
-        id: build-url
+        id: eas-build
         working-directory: mobile
         run: |
-          BUILD_URL=$(eas build:list --platform android --limit 1 --json | jq -r '.[0].artifacts.buildUrl')
+          BUILD_JSON=$(eas build --platform android --profile production --non-interactive --json)
+          echo "$BUILD_JSON" > build-output.json
+          BUILD_ID=$(echo "$BUILD_JSON" | jq -r '.[0].id')
+          echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
+
+      - name: Wait for build to complete
+        working-directory: mobile
+        run: |
+          BUILD_ID="${{ steps.eas-build.outputs.build_id }}"
+          echo "Waiting for build $BUILD_ID to complete..."
+          while true; do
+            STATUS=$(eas build:view "$BUILD_ID" --json | jq -r '.status')
+            echo "Build status: $STATUS"
+            if [ "$STATUS" = "finished" ]; then
+              break
+            elif [ "$STATUS" = "errored" ]; then
+              echo "Build failed!"
+              exit 1
+            fi
+            sleep 30
+          done
+
+      - name: Get build artifact URL
+        id: artifact
+        working-directory: mobile
+        run: |
+          BUILD_ID="${{ steps.eas-build.outputs.build_id }}"
+          BUILD_URL=$(eas build:view "$BUILD_ID" --json | jq -r '.artifacts.buildUrl')
           echo "url=$BUILD_URL" >> $GITHUB_OUTPUT
 
       - name: Download APK
         run: |
           mkdir -p artifacts
-          curl -L -o artifacts/quran-reel-detector.apk "${{ steps.build-url.outputs.url }}"
+          curl -L -o artifacts/quran-reel-detector.apk "${{ steps.artifact.outputs.url }}"
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.run_number }}
           name: Release v${{ github.run_number }}
           files: artifacts/quran-reel-detector.apk
           generate_release_notes: true
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
